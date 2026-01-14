@@ -1,0 +1,37 @@
+{
+  "trading": {
+    "underlyings": ["NIFTY", "BANKNIFTY"],
+    "strikesAroundATM": 10,
+    "expiryWeeks": 2,
+    "tradingStartTime": "09:15",
+    "tradingEndTime": "15:30"
+  },
+  "execution": {
+    "latencyMinMs": 100,
+    "latencyMaxMs": 500,
+    "baseSlippage": 0.05,
+    "velocitySlippageMultiplier": 0.01,
+    "ivSlippageMultiplier": 0.02,
+    "sizeSlippageMultiplier": 0.10,
+    "depthSlippageMultiplier": 0.50
+  },
+  "risk": {
+    "initialCapital": 500000,
+    "maxDailyLoss": 50000,
+    "maxDailyLossPct": 0.05,
+    "marginBreachThreshold": 0.90,
+    "forceExitOnBreach": true,
+    "expiryDayMarginMultiplier": 1.5
+  },
+  "database": {
+    "path": "./data/paper-trading.db",
+    "backupEnabled": true,
+    "backupIntervalMinutes": 60
+  },
+  "webhook": {
+    "enabled": false,
+    "port": 3000,
+    "secret": "",
+    "allowedIPs": []
+  }
+}

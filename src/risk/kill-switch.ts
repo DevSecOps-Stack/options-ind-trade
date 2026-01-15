@@ -7,7 +7,9 @@
  * - Force-exits positions when thresholds breached
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { RISK } from '../core/constants.js';
 import { eventBus } from '../core/events.js';
 import { KillSwitchActiveError } from '../core/errors.js';

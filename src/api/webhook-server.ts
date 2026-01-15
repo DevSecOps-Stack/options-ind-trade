@@ -23,7 +23,9 @@ import type {
   Underlying,
   OrderType,
 } from '../core/types.js';
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 
 // ============================================================================
 // SERVER SETUP

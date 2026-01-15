@@ -8,7 +8,9 @@
 
 import { persistenceManager } from '../core/persistence.js';
 import { getMarginTracker } from '../risk/margin-tracker.js';
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../core/events.js';
 import { PositionNotFoundError } from '../core/errors.js';

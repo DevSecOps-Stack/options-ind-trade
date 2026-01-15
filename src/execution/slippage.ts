@@ -9,7 +9,9 @@
  * - Order book depth
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { SLIPPAGE, LOT_SIZES } from '../core/constants.js';
 import { toDecimal, ZERO, roundToTick } from '../utils/decimal.js';
 import type {

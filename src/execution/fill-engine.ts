@@ -5,7 +5,9 @@
  * Handles market orders, limit orders, and partial fills.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { v4 as uuidv4 } from 'uuid';
 import { LATENCY, ORDERS, TICK_SIZE } from '../core/constants.js';
 import { eventBus } from '../core/events.js';

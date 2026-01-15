@@ -10,7 +10,9 @@
  * - We approximate with simplified rules based on moneyness and IV
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import {
   LOT_SIZES,
   MARGIN_PERCENTAGES,

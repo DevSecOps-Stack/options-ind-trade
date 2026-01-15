@@ -5,7 +5,9 @@
  * Provides fast access to LTP, bid/ask, depth.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { eventBus } from '../core/events.js';
 import { MarketDataStaleError } from '../core/errors.js';
 import { logger } from '../utils/logger.js';

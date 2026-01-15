@@ -1,5 +1,5 @@
 import { InstrumentManager } from '../market-data/instrument-manager.js';
-import { MarketState } from '../market-data/market-state.js';
+import { MarketStateManager } from '../market-data/market-state.js';
 import { FillEngine } from '../execution/fill-engine.js';
 import { PositionManager } from '../position/position-manager.js';
 import { StrategyAggregator } from '../position/strategy-aggregator.js';
@@ -19,7 +19,7 @@ interface StrangleCandidate {
 export class StrangleAutomator {
   constructor(
     private instrumentManager: InstrumentManager,
-    private marketState: MarketState,
+    private marketState: MarketStateManager,
     private fillEngine: FillEngine,
     private positionManager: PositionManager,
     private strategyAggregator: StrategyAggregator
@@ -83,9 +83,11 @@ export class StrangleAutomator {
       
       // 2. Create Strategy Container (Now allowed to be empty initially)
       const strategyName = `Strangle ${formatExpiry(candidate.expiry)} ${new Date().toLocaleTimeString()}`;
+      const ceStrike = candidate.ce.strike ?? 0;
+      const peStrike = candidate.pe.strike ?? 0;
       const strategy = this.strategyAggregator.createStrategy(
-        strategyName, 'STRANGLE', underlying, candidate.expiry, 
-        (candidate.ce.strike + candidate.pe.strike) / 2, 1
+        strategyName, 'SHORT_STRANGLE', underlying, candidate.expiry,
+        (ceStrike + peStrike) / 2, 1
       );
 
       const qty = candidate.ce.lotSize; 
@@ -94,13 +96,13 @@ export class StrangleAutomator {
       // 3. Place Orders & Link
       for (const leg of legs) {
         const order = await this.fillEngine.submitOrder({
-          symbol: leg.inst.tradingSymbol, 
-          underlying: leg.inst.underlying, 
+          symbol: leg.inst.tradingSymbol,
+          underlying: leg.inst.underlying ?? underlying,
           instrumentType: leg.type as 'CE' | 'PE',
-          strike: leg.inst.strike, 
-          expiry: candidate.expiry, 
-          side: 'SELL', 
-          quantity: qty, 
+          strike: leg.inst.strike ?? 0,
+          expiry: candidate.expiry,
+          side: 'SELL',
+          quantity: qty,
           orderType: 'MARKET'
         });
         

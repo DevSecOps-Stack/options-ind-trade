@@ -5,7 +5,9 @@
  * Used for slippage calculation and IV inflation modeling.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { SLIPPAGE } from '../core/constants.js';
 import { logger } from '../utils/logger.js';
 import { toDecimal, ZERO } from '../utils/decimal.js';

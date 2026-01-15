@@ -5,12 +5,19 @@
  * JavaScript's floating point arithmetic will cause P&L errors.
  */
 
-import Decimal from 'decimal.js';
+// Use require for decimal.js due to ES module compatibility issues
+import DecimalConstructor from 'decimal.js';
 
-// Re-export Decimal class and type for use throughout the codebase
+// Handle both ESM and CJS exports
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
+
+// Re-export for use throughout the codebase
 export { Decimal };
-export type DecimalValue = Decimal;
-import { TICK_SIZE } from '../core/constants.js';
+export type { Decimal as DecimalType };
+
+// Define TICK_SIZE here to avoid circular dependency with constants.ts
+const TICK_SIZE = new Decimal('0.05');
 
 // Configure Decimal.js for financial calculations
 Decimal.set({
@@ -247,8 +254,8 @@ export function deserializeDecimal(value: string): Decimal {
  * JSON replacer for Decimal values
  */
 export function decimalReplacer(_key: string, value: unknown): unknown {
-  if (value instanceof Decimal) {
-    return { __type: 'Decimal', value: value.toString() };
+  if (value && typeof value === 'object' && 'toFixed' in value) {
+    return { __type: 'Decimal', value: (value as Decimal).toString() };
   }
   return value;
 }
@@ -289,7 +296,7 @@ export function parseWithDecimal<T>(json: string): T {
  * Check if value is a valid Decimal
  */
 export function isValidDecimal(value: unknown): value is Decimal {
-  return value instanceof Decimal && value.isFinite();
+  return value !== null && typeof value === 'object' && 'isFinite' in value && (value as Decimal).isFinite();
 }
 
 /**

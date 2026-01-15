@@ -5,7 +5,9 @@
  * Includes safeguards for edge cases and convergence issues.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { PRICING } from '../core/constants.js';
 import { IVCalculationError } from '../core/errors.js';
 import { toDecimal, ZERO, ONE } from '../utils/decimal.js';

@@ -5,7 +5,7 @@
  * Never use native JavaScript numbers for prices, P&L, or margin calculations.
  */
 
-import Decimal from 'decimal.js';
+import { Decimal } from '../utils/decimal.js';
 
 // ============================================================================
 // ENUMS

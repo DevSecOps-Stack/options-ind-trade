@@ -353,7 +353,7 @@ BANKNIFTY: ${bnf > 0 ? `₹${bnf.toFixed(2)}` : '⏳ Loading...'}
 
     if (expiries.length === 0) {
       await this.bot.sendMessage(chatId,
-        `⚠️ No expiries found for ${underlying}.\nPlease login first with /login <token>`,
+        `⚠️ No expiries found for ${underlying}.\nMarket may be closed or instruments not loaded yet.`,
         { parse_mode: 'Markdown' }
       );
       return;
@@ -459,7 +459,7 @@ BANKNIFTY: ${bnf > 0 ? `₹${bnf.toFixed(2)}` : '⏳ Loading...'}
 
     if (spotPrice <= 0) {
       await this.bot.sendMessage(chatId,
-        `⚠️ Spot price not available for ${underlying}.\nPlease login first with /login <token>`,
+        `⚠️ Spot price not available for ${underlying}.\nMarket may be closed or data not loaded yet.`,
         { parse_mode: 'Markdown' }
       );
       return;

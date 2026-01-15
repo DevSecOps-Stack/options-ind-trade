@@ -1,12 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { KiteConnect } from 'kiteconnect';
 import chalk from 'chalk';
 
 const TOKEN_PATH = path.join(process.cwd(), 'data', 'token.json');
 
+// Use any type for kite due to kiteconnect package type definition issues
 export class TokenManager {
-  constructor(private kite: KiteConnect, private apiKey: string, private apiSecret: string) {}
+  constructor(private kite: any, private apiKey: string, private apiSecret: string) {}
 
   async loadToken(): Promise<boolean> {
     try {

@@ -966,9 +966,9 @@ ${safeText}
 
           // Track exit prices for journal
           if (pos.instrumentType === 'CE') {
-            ceExitPrice = order.avgPrice?.toNumber() ?? 0;
+            ceExitPrice = order.avgFillPrice?.toNumber() ?? 0;
           } else if (pos.instrumentType === 'PE') {
-            peExitPrice = order.avgPrice?.toNumber() ?? 0;
+            peExitPrice = order.avgFillPrice?.toNumber() ?? 0;
           }
         }
       } catch (error) {

@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { formatINR } from '../utils/decimal.js';
 import { calculateStrangleMargin, getLotSize } from '../utils/margin-calculator.js';
+import { getTradeJournal, type TradeEntry } from '../journal/trade-journal.js';
 import { StrangleAutomator } from '../strategies/strangle-automator.js';
 import { StrategyAggregator } from '../position/strategy-aggregator.js';
 import { PositionManager } from '../position/position-manager.js';
@@ -40,6 +41,7 @@ export class TelegramTradingBot {
   private initializeHandlers() {
     // Text Commands
     this.bot.onText(/\/start/, (msg) => this.safeExecute(msg.chat.id, () => this.showMainMenu(msg.chat.id)));
+    this.bot.onText(/\/menu/, (msg) => this.safeExecute(msg.chat.id, () => this.showMainMenu(msg.chat.id)));
     this.bot.onText(/\/help/, (msg) => this.safeExecute(msg.chat.id, () => this.showHelp(msg.chat.id)));
     this.bot.onText(/\/login (.+)/, (msg, match) => this.handleLogin(msg, match));
     this.bot.onText(/\/status/, (msg) => this.safeExecute(msg.chat.id, () => this.showStatus(msg.chat.id)));
@@ -50,6 +52,8 @@ export class TelegramTradingBot {
     this.bot.onText(/\/spot/, (msg) => this.safeExecute(msg.chat.id, () => this.showSpotPrices(msg.chat.id)));
     this.bot.onText(/\/chain(?:\s+(\w+))?/, (msg, match) => this.safeExecute(msg.chat.id, () => this.showOptionChain(msg.chat.id, match?.[1])));
     this.bot.onText(/\/margin(?:\s+(\w+))?/, (msg, match) => this.safeExecute(msg.chat.id, () => this.showMarginEstimate(msg.chat.id, match?.[1])));
+    this.bot.onText(/\/journal/, (msg) => this.safeExecute(msg.chat.id, () => this.showJournal(msg.chat.id)));
+    this.bot.onText(/\/stats/, (msg) => this.safeExecute(msg.chat.id, () => this.showStats(msg.chat.id)));
 
     // Button Clicks
     this.bot.on('callback_query', async (query) => {
@@ -76,6 +80,8 @@ export class TelegramTradingBot {
           case 'chain_banknifty': await this.showOptionChain(chatId, 'BANKNIFTY'); break;
           case 'margin_nifty': await this.showMarginEstimate(chatId, 'NIFTY'); break;
           case 'margin_banknifty': await this.showMarginEstimate(chatId, 'BANKNIFTY'); break;
+          case 'show_journal': await this.showJournal(chatId); break;
+          case 'show_stats': await this.showStats(chatId); break;
         }
         if (data.startsWith('chain_exp_')) {
           const parts = data.split('_');
@@ -128,6 +134,7 @@ export class TelegramTradingBot {
 
 **Available Commands:**
 /start - Main menu
+/menu - Main menu (alias)
 /help - Show this help
 /login <token> - Login with Zerodha request token
 /status - System status
@@ -140,6 +147,8 @@ export class TelegramTradingBot {
 /chain banknifty - View BANKNIFTY options chain
 /margin - NIFTY strangle margin estimate
 /margin banknifty - BANKNIFTY margin estimate
+/journal - View trade journal
+/stats - Performance statistics
 
 **Quick Actions:**
 Use the interactive menu from /start for trading operations.
@@ -202,6 +211,10 @@ Use the interactive menu from /start for trading operations.
             [
               { text: '💰 NIFTY Margin', callback_data: 'margin_nifty' },
               { text: '💰 BNF Margin', callback_data: 'margin_banknifty' }
+            ],
+            [
+              { text: '📓 Journal', callback_data: 'show_journal' },
+              { text: '📊 Stats', callback_data: 'show_stats' }
             ],
             [{ text: '🚨 EXIT ALL POSITIONS', callback_data: 'action_exit_all' }]
           ]
@@ -571,6 +584,114 @@ _Check broker for actual margin._
     });
   }
 
+  // --- TRADE JOURNAL ---
+  private async showJournal(chatId: number) {
+    const journal = getTradeJournal();
+    const openTrades = journal.getOpenTrades();
+    const recentTrades = journal.getRecentTrades(5);
+
+    let text = `📓 **Trade Journal**\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // Open trades
+    if (openTrades.length > 0) {
+      text += `**🔴 Open Positions (${openTrades.length})**\n`;
+      for (const trade of openTrades) {
+        const days = Math.ceil((Date.now() - new Date(trade.entryDate).getTime()) / (1000 * 60 * 60 * 24));
+        text += `• ${trade.underlying} ${trade.strategyType}\n`;
+        text += `  Entry: ₹${trade.totalPremium.toFixed(0)} | ${days}d ago\n`;
+        if (trade.ceStrike && trade.peStrike) {
+          text += `  Strikes: ${trade.peStrike}PE - ${trade.ceStrike}CE\n`;
+        }
+        text += `\n`;
+      }
+    } else {
+      text += `**🔴 No open positions**\n\n`;
+    }
+
+    // Recent closed trades
+    const closedTrades = recentTrades.filter(t => t.status === 'CLOSED');
+    if (closedTrades.length > 0) {
+      text += `**📋 Recent Closed Trades**\n`;
+      for (const trade of closedTrades.slice(0, 5)) {
+        const pnlIcon = (trade.realizedPnL ?? 0) >= 0 ? '✅' : '❌';
+        const pnl = trade.realizedPnL ?? 0;
+        text += `${pnlIcon} ${trade.underlying} | ₹${pnl.toLocaleString('en-IN')} | ${trade.daysHeld}d\n`;
+      }
+    } else {
+      text += `**📋 No closed trades yet**\n`;
+    }
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `_Use /stats for detailed analytics_`;
+
+    await this.bot.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📊 View Stats', callback_data: 'show_stats' }],
+          [{ text: '🔄 Refresh', callback_data: 'show_journal' }],
+          [{ text: '🏠 Main Menu', callback_data: 'menu_main' }]
+        ]
+      }
+    });
+  }
+
+  // --- PERFORMANCE STATS ---
+  private async showStats(chatId: number) {
+    const journal = getTradeJournal();
+    const stats = journal.getPerformanceStats();
+
+    const streakIcon = stats.currentStreak > 0 ? '🔥' : stats.currentStreak < 0 ? '❄️' : '➖';
+    const streakText = stats.currentStreak > 0
+      ? `${stats.currentStreak} wins`
+      : stats.currentStreak < 0
+        ? `${Math.abs(stats.currentStreak)} losses`
+        : 'neutral';
+
+    let text = `📊 **Performance Statistics**\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    if (stats.totalTrades === 0) {
+      text += `No trades recorded yet.\n\n`;
+      text += `Start paper trading to build your track record!\n`;
+      text += `Use the Strangle buttons from /menu to begin.`;
+    } else {
+      text += `**📈 Overview**\n`;
+      text += `Total Trades: ${stats.totalTrades} (${stats.openTrades} open)\n`;
+      text += `Win Rate: **${stats.winRate.toFixed(1)}%** (${stats.winningTrades}W / ${stats.losingTrades}L)\n`;
+      text += `Current Streak: ${streakIcon} ${streakText}\n\n`;
+
+      text += `**💰 P&L Summary**\n`;
+      const pnlIcon = stats.totalPnL >= 0 ? '💚' : '💔';
+      text += `${pnlIcon} Total P&L: **₹${stats.totalPnL.toLocaleString('en-IN')}**\n`;
+      text += `Avg Win: ₹${stats.avgWin.toFixed(0)} | Avg Loss: ₹${stats.avgLoss.toFixed(0)}\n`;
+      text += `Largest Win: ₹${stats.largestWin.toFixed(0)}\n`;
+      text += `Largest Loss: ₹${stats.largestLoss.toFixed(0)}\n`;
+      text += `Profit Factor: ${stats.profitFactor === Infinity ? '∞' : stats.profitFactor.toFixed(2)}\n\n`;
+
+      text += `**⏱ Time Analysis**\n`;
+      text += `Avg Days Held: ${stats.avgDaysHeld.toFixed(1)}\n`;
+      text += `Avg ROI: ${stats.avgROI.toFixed(2)}%\n\n`;
+
+      text += `**📍 By Underlying**\n`;
+      text += `NIFTY: ${stats.niftyStats.trades} trades | ₹${stats.niftyStats.pnl.toLocaleString('en-IN')} | ${stats.niftyStats.winRate.toFixed(0)}% WR\n`;
+      text += `BANKNIFTY: ${stats.bankniftyStats.trades} trades | ₹${stats.bankniftyStats.pnl.toLocaleString('en-IN')} | ${stats.bankniftyStats.winRate.toFixed(0)}% WR\n`;
+    }
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `_Updated: ${new Date().toLocaleTimeString()}_`;
+
+    await this.bot.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📓 View Journal', callback_data: 'show_journal' }],
+          [{ text: '🔄 Refresh', callback_data: 'show_stats' }],
+          [{ text: '🏠 Main Menu', callback_data: 'menu_main' }]
+        ]
+      }
+    });
+  }
+
   // --- LIVE DASHBOARD ---
   private async startLiveDashboard(chatId: number) {
     if (this.liveDashboardInterval) clearInterval(this.liveDashboardInterval);
@@ -736,15 +857,51 @@ ${safeText}
       await this.monitor.startMonitoring(latest.id, capital);
     }
 
+    // Log to Trade Journal
+    const journal = getTradeJournal();
+    const spotPrice = this.marketState.getSpotPrice(underlying).toNumber();
+    const ceStrike = candidate.ce.strike ?? 0;
+    const peStrike = candidate.pe.strike ?? 0;
+    const totalPremium = candidate.ceLtp + candidate.peLtp;
+    const lotSize = getLotSize(underlying);
+
+    // Calculate margin for logging
+    const margin = calculateStrangleMargin(
+      underlying, spotPrice, ceStrike, peStrike,
+      candidate.ceLtp, candidate.peLtp, 1
+    );
+
+    // Get Greeks if available
+    const greeks = this.positionManager.getNetGreeks();
+
+    journal.logEntry({
+      tradeId: latest?.id || `STR-${Date.now()}`,
+      strategyType: 'SHORT_STRANGLE',
+      underlying,
+      entryDate: new Date().toISOString(),
+      entrySpot: spotPrice,
+      ceStrike,
+      peStrike,
+      cePremium: candidate.ceLtp,
+      pePremium: candidate.peLtp,
+      totalPremium: totalPremium * lotSize,
+      lots: 1,
+      marginUsed: margin.totalMargin,
+      entryDelta: greeks.delta,
+      entryTheta: greeks.theta,
+      entryVega: greeks.vega,
+      notes: `Auto-deployed via Telegram. Capital: ₹${capital.toLocaleString('en-IN')}`,
+    });
+
     await this.bot.sendMessage(chatId,
-      `✅ **Strangle Deployed!**\n\nSold ${candidate.ce.strike} CE & ${candidate.pe.strike} PE\n\nMonitoring active. Use Live Dashboard to track.`,
+      `✅ **Strangle Deployed!**\n\nSold ${ceStrike} CE & ${peStrike} PE\n\n📓 Logged to Trade Journal\n\nMonitoring active. Use Live Dashboard to track.`,
       { parse_mode: 'Markdown' }
     );
 
     logger.info('Strangle deployed via Telegram', {
       underlying,
-      ceStrike: candidate.ce.strike,
-      peStrike: candidate.pe.strike,
+      ceStrike,
+      peStrike,
       capital
     });
   }
@@ -781,7 +938,14 @@ ${safeText}
 
     await this.bot.sendMessage(chatId, "🚨 **Closing all positions...**", { parse_mode: 'Markdown' });
 
+    // Get open trades from journal before closing
+    const journal = getTradeJournal();
+    const openTrades = journal.getOpenTrades();
+
     let closedCount = 0;
+    let ceExitPrice = 0;
+    let peExitPrice = 0;
+
     for (const pos of positions) {
       try {
         const side = pos.side === 'LONG' ? 'SELL' : 'BUY';
@@ -799,6 +963,13 @@ ${safeText}
         if (order.status === 'FILLED') {
           this.positionManager.processOrderFill(order);
           closedCount++;
+
+          // Track exit prices for journal
+          if (pos.instrumentType === 'CE') {
+            ceExitPrice = order.avgPrice?.toNumber() ?? 0;
+          } else if (pos.instrumentType === 'PE') {
+            peExitPrice = order.avgPrice?.toNumber() ?? 0;
+          }
         }
       } catch (error) {
         logger.error('Failed to close position', { symbol: pos.symbol, error });
@@ -806,8 +977,22 @@ ${safeText}
     }
 
     const pnl = this.positionManager.getAggregatePnL();
+
+    // Log exits to journal for matching open trades
+    for (const trade of openTrades) {
+      const spotPrice = this.marketState.getSpotPrice(trade.underlying).toNumber();
+      journal.logExit(trade.tradeId, {
+        exitDate: new Date().toISOString(),
+        exitSpot: spotPrice,
+        ceExitPrice,
+        peExitPrice,
+        exitReason: 'MANUAL',
+        realizedPnL: pnl.realized.toNumber(),
+      });
+    }
+
     await this.bot.sendMessage(chatId,
-      `✅ **Exit Complete**\n\nClosed ${closedCount} position(s)\nRealized P&L: ${formatINR(pnl.realized)}`,
+      `✅ **Exit Complete**\n\nClosed ${closedCount} position(s)\nRealized P&L: ${formatINR(pnl.realized)}\n\n📓 Logged to Trade Journal`,
       { parse_mode: 'Markdown' }
     );
 

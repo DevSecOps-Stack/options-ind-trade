@@ -26,6 +26,6 @@
     },
     "baseUrl": "."
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "config/debug-token.js"],
   "exclude": ["node_modules", "dist", "tests"]
 }

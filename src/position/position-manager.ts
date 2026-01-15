@@ -4,7 +4,11 @@
  * Manages open positions, handles position updates from trades,
  * calculates P&L in real-time.
  */
+// src/position/position-manager.ts
 
+// ... existing imports ...
+import { persistenceManager } from '../core/persistence.js'; // <--- ADD THIS
+import { getMarginTracker } from '../risk/margin-tracker.js'; // <--- ADD THIS
 import Decimal from 'decimal.js';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../core/events.js';
@@ -39,6 +43,26 @@ export class PositionManager {
   /**
    * Process a filled order and update/create position
    */
+  // --- INSERT THIS BLOCK HERE ---
+  constructor() {
+    this.loadState();
+  }
+
+  private loadState() {
+    const saved = persistenceManager.load();
+    if (saved) {
+      for (const pos of saved.positions) {
+        // Re-map the positions
+        this.positions.set(pos.id, pos);
+        this.positionsBySymbol.set(pos.symbol, pos.id);
+        
+        // Re-populate trades if available (optional, depending on your save structure)
+        // For now, we just restore positions to resume tracking P&L
+      }
+      logger.info(`💾 Restored ${this.positions.size} positions from disk`);
+    }
+  }
+  // --- END BLOCK ---
   processOrderFill(order: Order): Position {
     if (order.status !== 'FILLED' && order.status !== 'PARTIAL') {
       throw new Error('Order must be filled to process');
@@ -99,6 +123,20 @@ export class PositionManager {
 
     // Store trade
     this.trades.set(trade.id, trade);
+
+    // --- INSERT THIS BLOCK HERE ---
+    try {
+        const marginTracker = getMarginTracker();
+        const currentCapital = marginTracker.getState().initialCapital; 
+        
+        persistenceManager.save(
+            currentCapital, 
+            Array.from(this.positions.values())
+        );
+    } catch (err) {
+        logger.error('Failed to auto-save portfolio', { error: err });
+    }
+    // --- END BLOCK ---
 
     return position;
   }

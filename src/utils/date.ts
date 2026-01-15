@@ -21,7 +21,7 @@ import {
   setHours,
   setMinutes,
 } from 'date-fns';
-import { TRADING_HOURS, EXPIRY_TIMINGS, PRICING } from '../core/constants.js';
+import { TRADING_HOURS, PRICING } from '../core/constants.js';
 import Decimal from 'decimal.js';
 
 // ============================================================================
@@ -225,6 +225,11 @@ export function daysToExpiry(expiry: Date, referenceDate: Date = new Date()): nu
 }
 
 /**
+ * Calculate days to expiry (Alias for daysToExpiry to fix compatibility)
+ */
+export const getDaysToExpiry = daysToExpiry;
+
+/**
  * Calculate time to expiry in years (for Black-Scholes)
  */
 export function timeToExpiryYears(expiry: Date, referenceDate: Date = new Date()): Decimal {
@@ -352,4 +357,11 @@ export function isToday(date: Date): boolean {
   const today = startOfDay(nowIST());
   const target = startOfDay(toIST(date));
   return today.getTime() === target.getTime();
+}
+
+/**
+ * Formats a date for logging/display
+ */
+export function formatDate(date: Date): string {
+  return format(date, 'yyyy-MM-dd HH:mm:ss');
 }

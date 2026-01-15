@@ -5,7 +5,10 @@
  * Update if exchange rules change.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
+
 import type { Underlying } from './types.js';
 
 // ============================================================================

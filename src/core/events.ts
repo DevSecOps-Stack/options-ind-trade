@@ -5,7 +5,8 @@
  * Uses typed events for compile-time safety.
  */
 
-import EventEmitter from 'eventemitter3';
+import EventEmitterConstructor from 'eventemitter3';
+const EventEmitter = (EventEmitterConstructor as any).default || EventEmitterConstructor;
 import type {
   SystemEvent,
   SystemEventType,

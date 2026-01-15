@@ -5,7 +5,9 @@
  * Used for theoretical pricing and IV calculation.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { PRICING } from '../core/constants.js';
 import { toDecimal, ZERO, ONE } from '../utils/decimal.js';
 import type { BSParams, Greeks } from '../core/types.js';

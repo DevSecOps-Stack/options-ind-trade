@@ -22,7 +22,9 @@ import {
   setMinutes,
 } from 'date-fns';
 import { TRADING_HOURS, PRICING } from '../core/constants.js';
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 
 // ============================================================================
 // IST TIMEZONE HANDLING

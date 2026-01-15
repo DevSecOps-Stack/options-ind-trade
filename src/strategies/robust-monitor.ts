@@ -83,7 +83,7 @@ export class RobustMonitor {
         const strat = this.aggregator.getStrategy(id);
         
         // If strategy was manually closed, remove from monitor
-        if (!strat || strat.positionIds.length === 0) {
+        if (!strat || strat.positions.length === 0) {
             this.activeStrategies.delete(id);
             continue;
         }
@@ -112,7 +112,7 @@ export class RobustMonitor {
     console.log(chalk.yellow(`📉 Exiting Strategy: ${strat.name}...`));
     
     // Close all positions in this strategy
-    for (const posId of strat.positionIds) {
+    for (const posId of strat.positions) {
         const pos = this.positionManager.getPosition(posId);
         if (pos) {
             await this.fillEngine.submitOrder({

@@ -6,7 +6,9 @@
  */
 
 import { KiteTicker } from 'kiteconnect';
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { eventBus } from '../core/events.js';
 import { WebSocketConnectionError } from '../core/errors.js';
 import { ZERODHA, LATENCY, SPOT_TOKENS } from '../core/constants.js';

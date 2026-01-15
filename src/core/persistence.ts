@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { logger } from '../utils/logger.js';
 import type { Position } from './types.js';
 

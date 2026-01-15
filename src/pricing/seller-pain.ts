@@ -5,7 +5,9 @@
  * during fast spot moves. This is CRITICAL for realistic paper trading.
  */
 
-import Decimal from 'decimal.js';
+import DecimalConstructor from 'decimal.js';
+const Decimal = (DecimalConstructor as any).default || DecimalConstructor;
+type Decimal = InstanceType<typeof Decimal>;
 import { PRICING, SLIPPAGE } from '../core/constants.js';
 import { toDecimal, ZERO, ONE } from '../utils/decimal.js';
 import { calculateOptionPrice, calculateGreeks, isITM, isATM } from './black-scholes.js';

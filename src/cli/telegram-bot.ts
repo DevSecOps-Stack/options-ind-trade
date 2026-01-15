@@ -47,6 +47,7 @@ export class TelegramTradingBot {
     this.bot.onText(/\/greeks/, (msg) => this.safeExecute(msg.chat.id, () => this.showGreeks(msg.chat.id)));
     this.bot.onText(/\/strategies/, (msg) => this.safeExecute(msg.chat.id, () => this.showStrategies(msg.chat.id)));
     this.bot.onText(/\/spot/, (msg) => this.safeExecute(msg.chat.id, () => this.showSpotPrices(msg.chat.id)));
+    this.bot.onText(/\/chain(?:\s+(\w+))?/, (msg, match) => this.safeExecute(msg.chat.id, () => this.showOptionChain(msg.chat.id, match?.[1])));
 
     // Button Clicks
     this.bot.on('callback_query', async (query) => {
@@ -69,6 +70,14 @@ export class TelegramTradingBot {
           case 'show_pnl': await this.showPnL(chatId); break;
           case 'show_greeks': await this.showGreeks(chatId); break;
           case 'show_status': await this.showStatus(chatId); break;
+          case 'chain_nifty': await this.showOptionChain(chatId, 'NIFTY'); break;
+          case 'chain_banknifty': await this.showOptionChain(chatId, 'BANKNIFTY'); break;
+        }
+        if (data.startsWith('chain_exp_')) {
+          const parts = data.split('_');
+          const underlying = parts[2] as 'NIFTY' | 'BANKNIFTY';
+          const expiryIndex = parseInt(parts[3] ?? '0');
+          await this.showOptionChain(chatId, underlying, expiryIndex);
         }
         if (data.startsWith('DEPLOY_STRANGLE_')) {
           const parts = data.split('_');
@@ -123,6 +132,8 @@ export class TelegramTradingBot {
 /greeks - View net Greeks
 /strategies - View active strategies
 /spot - View spot prices
+/chain - View NIFTY options chain
+/chain banknifty - View BANKNIFTY options chain
 
 **Quick Actions:**
 Use the interactive menu from /start for trading operations.
@@ -177,6 +188,10 @@ Use the interactive menu from /start for trading operations.
             [
               { text: '📉 Greeks', callback_data: 'show_greeks' },
               { text: '⚙️ Status', callback_data: 'show_status' }
+            ],
+            [
+              { text: '🔗 NIFTY Chain', callback_data: 'chain_nifty' },
+              { text: '🔗 BNF Chain', callback_data: 'chain_banknifty' }
             ],
             [{ text: '🚨 EXIT ALL POSITIONS', callback_data: 'action_exit_all' }]
           ]
@@ -304,6 +319,112 @@ BANKNIFTY: ${bnf > 0 ? `₹${bnf.toFixed(2)}` : '⏳ Loading...'}
 *${new Date().toLocaleTimeString()}*
 `;
     await this.bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  }
+
+  // --- OPTIONS CHAIN ---
+  private async showOptionChain(chatId: number, undInput?: string, expiryIndex: number = 0) {
+    const underlying = (undInput?.toUpperCase() === 'BANKNIFTY' ? 'BANKNIFTY' : 'NIFTY') as 'NIFTY' | 'BANKNIFTY';
+
+    // Get available expiries
+    const expiries = this.instrumentManager.getAvailableExpiries(underlying);
+
+    if (expiries.length === 0) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ No expiries found for ${underlying}.\nPlease login first with /login <token>`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Select expiry
+    const selectedExpiry = expiries[Math.min(expiryIndex, expiries.length - 1)]!;
+    const expiryStr = selectedExpiry.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    // Get spot price for ATM calculation
+    const spotPrice = this.marketState.getSpotPrice(underlying).toNumber();
+
+    if (spotPrice <= 0) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ Spot price not available for ${underlying}.\nMarket data may still be loading.`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Get option chain from instrument manager
+    const chainData = this.instrumentManager.getOptionChain(underlying, selectedExpiry);
+
+    if (!chainData || chainData.strikes.size === 0) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ No option chain data for ${underlying} ${expiryStr}`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Determine ATM strike
+    const strikeDiff = underlying === 'BANKNIFTY' ? 100 : 50;
+    const atmStrike = Math.round(spotPrice / strikeDiff) * strikeDiff;
+
+    // Get strikes around ATM (5 above, 5 below = 11 strikes)
+    const allStrikes = Array.from(chainData.strikes.keys()).sort((a, b) => a - b);
+    const atmIndex = allStrikes.findIndex(s => s >= atmStrike);
+    const startIdx = Math.max(0, atmIndex - 5);
+    const endIdx = Math.min(allStrikes.length, atmIndex + 6);
+    const displayStrikes = allStrikes.slice(startIdx, endIdx);
+
+    // Build chain display
+    let text = `📊 **${underlying} Options Chain**\n`;
+    text += `📅 Expiry: ${expiryStr}\n`;
+    text += `📍 Spot: ₹${spotPrice.toFixed(2)} | ATM: ${atmStrike}\n`;
+    text += `────────────────────────\n`;
+    text += `\`CE LTP  │ STRIKE │  PE LTP\`\n`;
+    text += `────────────────────────\n`;
+
+    for (const strike of displayStrikes) {
+      const entry = chainData.strikes.get(strike);
+      if (!entry) continue;
+
+      // Get LTP from market state
+      const ceLtp = entry.ce ? this.marketState.getLTP(entry.ce.instrumentToken).toNumber() : 0;
+      const peLtp = entry.pe ? this.marketState.getLTP(entry.pe.instrumentToken).toNumber() : 0;
+
+      // Format prices
+      const cePrice = ceLtp > 0 ? ceLtp.toFixed(2).padStart(7) : '   ---';
+      const pePrice = peLtp > 0 ? peLtp.toFixed(2).padStart(7) : '---   ';
+      const strikeStr = strike.toString().padStart(6).padEnd(6);
+
+      // Highlight ATM
+      const isATM = strike === atmStrike;
+      const marker = isATM ? '▶' : ' ';
+
+      text += `\`${cePrice} │${marker}${strikeStr}│ ${pePrice}\`\n`;
+    }
+
+    text += `────────────────────────\n`;
+    text += `_Updated: ${new Date().toLocaleTimeString()}_`;
+
+    // Build expiry selection buttons (show first 4 expiries)
+    const expiryButtons = expiries.slice(0, 4).map((exp, idx) => ({
+      text: idx === expiryIndex ? `✓ ${exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` :
+                                  exp.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+      callback_data: `chain_exp_${underlying}_${idx}`
+    }));
+
+    await this.bot.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: underlying === 'NIFTY' ? '✓ NIFTY' : 'NIFTY', callback_data: 'chain_nifty' },
+            { text: underlying === 'BANKNIFTY' ? '✓ BANKNIFTY' : 'BANKNIFTY', callback_data: 'chain_banknifty' }
+          ],
+          expiryButtons,
+          [{ text: '🔄 Refresh', callback_data: `chain_exp_${underlying}_${expiryIndex}` }],
+          [{ text: '🏠 Main Menu', callback_data: 'menu_main' }]
+        ]
+      }
+    });
   }
 
   // --- LIVE DASHBOARD ---

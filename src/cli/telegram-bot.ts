@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { formatINR } from '../utils/decimal.js';
+import { calculateStrangleMargin, getLotSize } from '../utils/margin-calculator.js';
 import { StrangleAutomator } from '../strategies/strangle-automator.js';
 import { StrategyAggregator } from '../position/strategy-aggregator.js';
 import { PositionManager } from '../position/position-manager.js';
@@ -48,6 +49,7 @@ export class TelegramTradingBot {
     this.bot.onText(/\/strategies/, (msg) => this.safeExecute(msg.chat.id, () => this.showStrategies(msg.chat.id)));
     this.bot.onText(/\/spot/, (msg) => this.safeExecute(msg.chat.id, () => this.showSpotPrices(msg.chat.id)));
     this.bot.onText(/\/chain(?:\s+(\w+))?/, (msg, match) => this.safeExecute(msg.chat.id, () => this.showOptionChain(msg.chat.id, match?.[1])));
+    this.bot.onText(/\/margin(?:\s+(\w+))?/, (msg, match) => this.safeExecute(msg.chat.id, () => this.showMarginEstimate(msg.chat.id, match?.[1])));
 
     // Button Clicks
     this.bot.on('callback_query', async (query) => {
@@ -72,6 +74,8 @@ export class TelegramTradingBot {
           case 'show_status': await this.showStatus(chatId); break;
           case 'chain_nifty': await this.showOptionChain(chatId, 'NIFTY'); break;
           case 'chain_banknifty': await this.showOptionChain(chatId, 'BANKNIFTY'); break;
+          case 'margin_nifty': await this.showMarginEstimate(chatId, 'NIFTY'); break;
+          case 'margin_banknifty': await this.showMarginEstimate(chatId, 'BANKNIFTY'); break;
         }
         if (data.startsWith('chain_exp_')) {
           const parts = data.split('_');
@@ -134,6 +138,8 @@ export class TelegramTradingBot {
 /spot - View spot prices
 /chain - View NIFTY options chain
 /chain banknifty - View BANKNIFTY options chain
+/margin - NIFTY strangle margin estimate
+/margin banknifty - BANKNIFTY margin estimate
 
 **Quick Actions:**
 Use the interactive menu from /start for trading operations.
@@ -192,6 +198,10 @@ Use the interactive menu from /start for trading operations.
             [
               { text: '🔗 NIFTY Chain', callback_data: 'chain_nifty' },
               { text: '🔗 BNF Chain', callback_data: 'chain_banknifty' }
+            ],
+            [
+              { text: '💰 NIFTY Margin', callback_data: 'margin_nifty' },
+              { text: '💰 BNF Margin', callback_data: 'margin_banknifty' }
             ],
             [{ text: '🚨 EXIT ALL POSITIONS', callback_data: 'action_exit_all' }]
           ]
@@ -427,6 +437,140 @@ BANKNIFTY: ${bnf > 0 ? `₹${bnf.toFixed(2)}` : '⏳ Loading...'}
     });
   }
 
+  // --- MARGIN ESTIMATE ---
+  private async showMarginEstimate(chatId: number, undInput?: string) {
+    const underlying = (undInput?.toUpperCase() === 'BANKNIFTY' ? 'BANKNIFTY' : 'NIFTY') as 'NIFTY' | 'BANKNIFTY';
+
+    // Get spot price
+    const spotPrice = this.marketState.getSpotPrice(underlying).toNumber();
+
+    if (spotPrice <= 0) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ Spot price not available for ${underlying}.\nPlease login first with /login <token>`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Get nearest expiry
+    const expiries = this.instrumentManager.getAvailableExpiries(underlying);
+    if (expiries.length === 0) {
+      await this.bot.sendMessage(chatId, `⚠️ No expiries found for ${underlying}.`);
+      return;
+    }
+
+    const nearestExpiry = expiries[0]!;
+    const chainData = this.instrumentManager.getOptionChain(underlying, nearestExpiry);
+
+    if (!chainData || chainData.strikes.size === 0) {
+      await this.bot.sendMessage(chatId, `⚠️ No option chain data for ${underlying}.`);
+      return;
+    }
+
+    // Find ATM strike and typical OTM strikes for strangle
+    const strikeDiff = underlying === 'BANKNIFTY' ? 100 : 50;
+    const atmStrike = Math.round(spotPrice / strikeDiff) * strikeDiff;
+
+    // Typical short strangle: ~200-300 points OTM for NIFTY, ~400-500 for BANKNIFTY
+    const otmDistance = underlying === 'BANKNIFTY' ? 500 : 250;
+    const ceStrike = atmStrike + otmDistance;
+    const peStrike = atmStrike - otmDistance;
+
+    // Get option data
+    const ceEntry = chainData.strikes.get(ceStrike);
+    const peEntry = chainData.strikes.get(peStrike);
+
+    if (!ceEntry?.ce || !peEntry?.pe) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ Could not find strikes ${ceStrike} CE / ${peStrike} PE.\nTry after market data loads.`
+      );
+      return;
+    }
+
+    // Get LTPs
+    const ceLtp = this.marketState.getLTP(ceEntry.ce.instrumentToken).toNumber();
+    const peLtp = this.marketState.getLTP(peEntry.pe.instrumentToken).toNumber();
+
+    if (ceLtp <= 0 || peLtp <= 0) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ Option prices not available yet. Wait for market data to load.`
+      );
+      return;
+    }
+
+    // Calculate margin
+    const margin = calculateStrangleMargin(
+      underlying,
+      spotPrice,
+      ceStrike,
+      peStrike,
+      ceLtp,
+      peLtp,
+      1 // 1 lot
+    );
+
+    const lotSize = getLotSize(underlying);
+    const totalPremium = ceLtp + peLtp;
+    const upperBreakeven = ceStrike + totalPremium;
+    const lowerBreakeven = peStrike - totalPremium;
+    const expiryStr = nearestExpiry.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+
+    const text = `
+💰 **${underlying} Short Strangle - Margin Estimate**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📍 Spot: ₹${spotPrice.toFixed(2)}
+📅 Expiry: ${expiryStr}
+
+**Position (1 Lot = ${lotSize} qty):**
+📉 SELL ${ceStrike} CE @ ₹${ceLtp.toFixed(2)}
+📈 SELL ${peStrike} PE @ ₹${peLtp.toFixed(2)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**💵 Premium Received:**
+CE: ₹${(ceLtp * lotSize).toLocaleString('en-IN')}
+PE: ₹${(peLtp * lotSize).toLocaleString('en-IN')}
+**Total: ₹${margin.premiumReceived.toLocaleString('en-IN')}**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**🏦 Margin Required:**
+CE Leg: ~₹${margin.ceMargin.toLocaleString('en-IN')}
+PE Leg: ~₹${margin.peMargin.toLocaleString('en-IN')}
+Benefit: -₹${margin.marginBenefit.toLocaleString('en-IN')} ✅
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**Total Margin: ₹${margin.totalMargin.toLocaleString('en-IN')}**
+Net Blocked: ₹${margin.netMarginBlocked.toLocaleString('en-IN')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**📊 Return Analysis:**
+ROI: **${margin.roi}%** (if expires OTM)
+Max Profit: ₹${margin.premiumReceived.toLocaleString('en-IN')}
+Max Loss: ${margin.maxLoss}
+
+**🛡️ Breakeven Points:**
+Upper: ${upperBreakeven.toFixed(0)} (${((upperBreakeven - spotPrice) / spotPrice * 100).toFixed(1)}% up)
+Lower: ${lowerBreakeven.toFixed(0)} (${((spotPrice - lowerBreakeven) / spotPrice * 100).toFixed(1)}% down)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_Approximate values for learning._
+_Check broker for actual margin._
+`;
+
+    await this.bot.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: underlying === 'NIFTY' ? '✓ NIFTY' : 'NIFTY', callback_data: 'margin_nifty' },
+            { text: underlying === 'BANKNIFTY' ? '✓ BANKNIFTY' : 'BANKNIFTY', callback_data: 'margin_banknifty' }
+          ],
+          [{ text: '🔄 Refresh', callback_data: `margin_${underlying.toLowerCase()}` }],
+          [{ text: '🏠 Main Menu', callback_data: 'menu_main' }]
+        ]
+      }
+    });
+  }
+
   // --- LIVE DASHBOARD ---
   private async startLiveDashboard(chatId: number) {
     if (this.liveDashboardInterval) clearInterval(this.liveDashboardInterval);
@@ -530,17 +674,32 @@ ${safeText}
     const ceStrike = candidate.ce.strike ?? 0;
     const safeZone = `${(peStrike - totalPrem).toFixed(0)} - ${(ceStrike + totalPrem).toFixed(0)}`;
 
+    // Calculate margin estimate
+    const spotPrice = this.marketState.getSpotPrice(underlying).toNumber();
+    const margin = calculateStrangleMargin(
+      underlying,
+      spotPrice,
+      ceStrike,
+      peStrike,
+      candidate.ceLtp,
+      candidate.peLtp,
+      1
+    );
+
     const text = `
 🎯 **Strangle Candidate (${underlying})**
 ────────────────
-📉 SELL CE: ${candidate.ce.strike} @ ₹${candidate.ceLtp.toFixed(2)}
-📈 SELL PE: ${candidate.pe.strike} @ ₹${candidate.peLtp.toFixed(2)}
+📉 SELL CE: ${ceStrike} @ ₹${candidate.ceLtp.toFixed(2)}
+📈 SELL PE: ${peStrike} @ ₹${candidate.peLtp.toFixed(2)}
 
-💰 Total Premium: ₹${totalPrem.toFixed(2)}
-📊 Max Profit: ₹${maxProfit.toFixed(0)} (1 lot)
+💰 **Premium: ₹${margin.premiumReceived.toLocaleString('en-IN')}**
+🏦 **Margin: ~₹${margin.totalMargin.toLocaleString('en-IN')}**
+📊 **ROI: ${margin.roi}%** (if expires OTM)
+
 🛡️ Safe Zone: ${safeZone}
+⚠️ Max Loss: Unlimited
 
-*Based on capital: ₹${capital.toLocaleString()}*
+*Capital: ₹${capital.toLocaleString('en-IN')}*
 `;
 
     await this.bot.sendMessage(chatId, text, {

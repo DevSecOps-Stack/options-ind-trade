@@ -40,6 +40,7 @@ export class TelegramTradingBot {
   private initializeHandlers() {
     // Text Commands
     this.bot.onText(/\/start/, (msg) => this.safeExecute(msg.chat.id, () => this.showMainMenu(msg.chat.id)));
+    this.bot.onText(/\/menu/, (msg) => this.safeExecute(msg.chat.id, () => this.showMainMenu(msg.chat.id)));
     this.bot.onText(/\/help/, (msg) => this.safeExecute(msg.chat.id, () => this.showHelp(msg.chat.id)));
     this.bot.onText(/\/login (.+)/, (msg, match) => this.handleLogin(msg, match));
     this.bot.onText(/\/status/, (msg) => this.safeExecute(msg.chat.id, () => this.showStatus(msg.chat.id)));
@@ -128,6 +129,7 @@ export class TelegramTradingBot {
 
 **Available Commands:**
 /start - Main menu
+/menu - Main menu (alias)
 /help - Show this help
 /login <token> - Login with Zerodha request token
 /status - System status

@@ -1,5 +1,6 @@
-import { Strategy, StrategyType, Underlying, Position, StrategyStatus } from '../core/types.js';
+import { Strategy, StrategyType, Underlying } from '../core/types.js';
 import { v4 as uuidv4 } from 'uuid';
+import { Decimal, ZERO } from '../utils/decimal.js';
 
 export class StrategyAggregator {
   private strategies: Map<string, Strategy> = new Map();
@@ -11,8 +12,8 @@ export class StrategyAggregator {
     type: StrategyType,
     underlying: Underlying,
     expiry: Date,
-    strike: number,
-    lotSize: number
+    atmStrike: number,
+    lots: number
   ): Strategy {
     const strategy: Strategy = {
       id: uuidv4(),
@@ -20,13 +21,18 @@ export class StrategyAggregator {
       type,
       underlying,
       expiry,
-      strike,
-      lotSize,
-      status: 'ACTIVE', // Default to ACTIVE
-      createdAt: new Date(),
-      positionIds: [],  // Start empty
-      totalPnL: new (require('decimal.js').Decimal)(0),
-      legs: []
+      atmStrike,
+      legs: [],
+      positions: [],
+      status: 'OPEN',
+      entryTime: new Date(),
+      realizedPnL: ZERO,
+      unrealizedPnL: ZERO,
+      totalPnL: ZERO,
+      breakevens: [],
+      margin: ZERO,
+      lotSize: 0,
+      lots
     };
 
     this.strategies.set(strategy.id, strategy);
@@ -37,8 +43,8 @@ export class StrategyAggregator {
     const strategy = this.strategies.get(strategyId);
     if (!strategy) throw new Error('Strategy not found');
 
-    if (!strategy.positionIds.includes(positionId)) {
-      strategy.positionIds.push(positionId);
+    if (!strategy.positions.includes(positionId)) {
+      strategy.positions.push(positionId);
       this.positionMap.set(positionId, strategyId);
     }
   }
@@ -48,7 +54,7 @@ export class StrategyAggregator {
   }
 
   getOpenStrategies(): Strategy[] {
-    return Array.from(this.strategies.values()).filter(s => s.status === 'ACTIVE');
+    return Array.from(this.strategies.values()).filter(s => s.status === 'OPEN');
   }
 
   getStrategyForPosition(positionId: string): Strategy | undefined {
@@ -59,7 +65,14 @@ export class StrategyAggregator {
 
 // Singleton
 let instance: StrategyAggregator | null = null;
+
 export function getStrategyAggregator(): StrategyAggregator {
-  if (!instance) instance = new StrategyAggregator();
+  if (!instance) {
+    instance = new StrategyAggregator();
+  }
   return instance;
+}
+
+export function resetStrategyAggregator(): void {
+  instance = null;
 }

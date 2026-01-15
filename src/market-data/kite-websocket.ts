@@ -64,7 +64,7 @@ type TickerMode = 'ltp' | 'quote' | 'full';
 // ============================================================================
 
 export class KiteWebSocketManager {
-  private ticker: KiteTicker | null = null;
+  private ticker: InstanceType<typeof KiteTicker> | null = null;
   private connected = false;
   private reconnecting = false;
   private reconnectAttempts = 0;
@@ -213,7 +213,7 @@ export class KiteWebSocketManager {
     raw: RawTick,
     instrumentManager: ReturnType<typeof getInstrumentManager>
   ): MarketTick | null {
-    const instrument = instrumentManager.getByToken(raw.instrument_token);
+    const instrument = instrumentManager.getInstrument(raw.instrument_token);
     if (!instrument) {
       // Check if it's a spot index
       const spotEntry = Object.entries(SPOT_TOKENS).find(([, token]) => token === raw.instrument_token);
@@ -436,15 +436,12 @@ export class KiteWebSocketManager {
     // Wait for spot prices
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Get spot prices
-    const spotPrices = marketState.getAllSpotPrices();
-
-    // Get all tokens to subscribe
-    const tokens = instrumentManager.getSubscriptionTokens(
-      underlyings,
-      strikesAroundATM,
-      spotPrices
-    );
+    // Get all tokens to subscribe for each underlying
+    const tokens: number[] = [];
+    for (const underlying of underlyings) {
+      const underlyingTokens = instrumentManager.getSubscriptionTokens(underlying, strikesAroundATM);
+      tokens.push(...underlyingTokens);
+    }
 
     // Subscribe to all
     this.subscribe(tokens);

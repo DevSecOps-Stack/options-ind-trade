@@ -7,6 +7,7 @@ import inquirer from 'inquirer';
 import Table from 'cli-table3';
 import chalk from 'chalk';
 import { KiteConnect } from 'kiteconnect';
+type KiteInstance = InstanceType<typeof KiteConnect>;
 import { loadConfig } from '../config/index.js';
 import { formatINR } from '../utils/decimal.js';
 import { getKiteWebSocket } from '../market-data/kite-websocket.js';
@@ -39,9 +40,9 @@ program
       const config = loadConfig();
       const kite = new KiteConnect({ api_key: config.zerodha.apiKey });
 
-      // Initialize Managers
-      const tokenManager = new TokenManager(kite, config.zerodha.apiKey, config.zerodha.apiSecret);
-      const instrumentManager = getInstrumentManager(kite); // Singleton created here
+      // Initialize Managers (cast kite to any due to type mismatch in kiteconnect package)
+      const tokenManager = new TokenManager(kite as any, config.zerodha.apiKey, config.zerodha.apiSecret);
+      const instrumentManager = getInstrumentManager(kite as any); // Singleton created here
       const positionManager = getPositionManager();
       const strategyAggregator = getStrategyAggregator();
       const fillEngine = getFillEngine();
@@ -112,7 +113,7 @@ program
 
         // 2. Connect WebSocket
         const liveToken = (kite as any).access_token as string || config.zerodha.accessToken;
-        const ws = getKiteWebSocket(kite, config.zerodha.apiKey, liveToken);
+        const ws = getKiteWebSocket(kite as any, config.zerodha.apiKey, liveToken);
         await ws.connect();
         console.log(chalk.green('✓ WebSocket connected'));
         

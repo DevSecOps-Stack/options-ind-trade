@@ -228,4 +228,4 @@ export function enableEventLogging(logger: (msg: string) => void): () => void {
 // TYPE EXPORTS
 // ============================================================================
 
-export type { EventHandler, EventPayloads };
+export type { EventHandler };

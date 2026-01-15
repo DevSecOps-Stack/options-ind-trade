@@ -46,7 +46,7 @@ export class InstrumentManager {
         const expiry = new Date(raw.expiry as string);
         if (isNaN(expiry.getTime())) continue;
 
-        const inst: Instrument = {
+        const inst: InstrumentWithPrice = {
           instrumentToken: raw.instrument_token,
           exchangeToken: raw.exchange_token,
           tradingSymbol: raw.tradingsymbol,

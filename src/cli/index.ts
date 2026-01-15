@@ -131,7 +131,7 @@ program
 
         if (tokensToSubscribe.length > 0) {
             ws.subscribe(tokensToSubscribe);
-            ws.setMode('full', tokensToSubscribe); // Set to Full mode for LTP
+            ws.setMode('full'); // Set to Full mode for LTP
             console.log(chalk.green(`✓ FORCE SUBSCRIBED to ${tokensToSubscribe.length} instruments.`));
         } else {
             console.log(chalk.red('❌ No tokens found to subscribe. Check Instrument Manager!'));

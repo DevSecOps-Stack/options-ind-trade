@@ -84,7 +84,15 @@ program
             }
         } else {
             console.log(chalk.gray('Waiting for /login via Telegram...'));
-            await new Promise(() => {}); 
+            // Wait for Telegram login with timeout check every 5 seconds
+            while (!hasToken) {
+              await new Promise(resolve => setTimeout(resolve, 5000));
+              hasToken = await tokenManager.loadToken();
+              if (hasToken) {
+                console.log(chalk.green('✓ Token received via Telegram!'));
+                break;
+              }
+            }
         }
       }
 
@@ -103,8 +111,7 @@ program
         }
 
         // 2. Connect WebSocket
-        // @ts-ignore
-        const liveToken = kite.access_token || config.zerodha.accessToken;
+        const liveToken = (kite as any).access_token as string || config.zerodha.accessToken;
         const ws = getKiteWebSocket(kite, config.zerodha.apiKey, liveToken);
         await ws.connect();
         console.log(chalk.green('✓ WebSocket connected'));

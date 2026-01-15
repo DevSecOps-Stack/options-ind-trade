@@ -6,6 +6,10 @@
  */
 
 import Decimal from 'decimal.js';
+
+// Re-export Decimal class and type for use throughout the codebase
+export { Decimal };
+export type DecimalValue = Decimal;
 import { TICK_SIZE } from '../core/constants.js';
 
 // Configure Decimal.js for financial calculations

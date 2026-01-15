@@ -96,7 +96,7 @@ export class StrangleAutomator {
         const order = await this.fillEngine.submitOrder({
           symbol: leg.inst.tradingSymbol, 
           underlying: leg.inst.underlying, 
-          instrumentType: leg.type as any,
+          instrumentType: leg.type as 'CE' | 'PE',
           strike: leg.inst.strike, 
           expiry: candidate.expiry, 
           side: 'SELL', 

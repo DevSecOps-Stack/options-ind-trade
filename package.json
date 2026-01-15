@@ -8,11 +8,16 @@
     "build": "tsc",
     "start": "tsx src/main.ts",
     "dev": "tsx watch src/main.ts",
-    "cli": "tsx src/cli/index.ts",
+    "cli": "tsx src/cli/index.ts start",
     "webhook": "tsx src/api/webhook-server.ts",
     "test": "vitest",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docker:build": "docker build -t nse-paper-trading .",
+    "docker:run": "docker run -it --rm --env-file .env -v $(pwd)/data:/app/data nse-paper-trading",
+    "docker:run:detached": "docker run -d --name nse-trader --env-file .env -v $(pwd)/data:/app/data -p 3000:3000 nse-paper-trading",
+    "docker:stop": "docker stop nse-trader && docker rm nse-trader",
+    "docker:logs": "docker logs -f nse-trader"
   },
   "keywords": [
     "options",

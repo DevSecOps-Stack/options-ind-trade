@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "tsx src/main.ts",
+    "start": "node dist/cli/index.js start",
     "dev": "tsx watch src/main.ts",
     "cli": "tsx src/cli/index.ts start",
     "webhook": "tsx src/api/webhook-server.ts",

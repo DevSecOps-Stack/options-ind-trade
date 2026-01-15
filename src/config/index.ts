@@ -23,8 +23,9 @@ dotenv.config();
 const zerodhaConfigSchema = z.object({
   apiKey: z.string().min(1, 'Zerodha API key is required'),
   apiSecret: z.string().min(1, 'Zerodha API secret is required'),
-  accessToken: z.string().min(1, 'Zerodha access token is required'),
-  userId: z.string().min(1, 'Zerodha user ID is required'),
+  // FIX: Allow empty string so the app can start and ask for login
+  accessToken: z.string().default(''), 
+  userId: z.string().default(''),
 });
 
 const tradingConfigSchema = z.object({

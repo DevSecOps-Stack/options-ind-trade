@@ -266,4 +266,7 @@ async function promptOrder() {
 export async function runCLI(args?: string[]) {
     await program.parseAsync(process.argv);
 }
-if (process.argv[1].includes('cli/index.ts')) runCLI();
+// Fix: Allow running from compiled JS in Docker
+if (process.argv[1].includes('cli/index') || process.argv[1].includes('index.js')) {
+    runCLI();
+}

@@ -350,6 +350,48 @@ options-ind-trade/
 - Verify `TELEGRAM_CHAT_ID` matches your user ID
 - Ensure you've clicked "Start" on the bot
 
+### Docker .env file issues (ETELEGRAM: 404 Not Found)
+
+If the bot works with explicit `-e` flags but not with `--env-file .env`:
+
+**1. Verify .env file exists:**
+```bash
+ls -la .env
+# If missing, create it:
+cp .env.example .env
+```
+
+**2. Check .env file format (IMPORTANT):**
+```bash
+# .env must NOT have quotes around values
+# WRONG:
+TELEGRAM_BOT_TOKEN="123456:ABC..."  # Quotes included literally!
+
+# CORRECT:
+TELEGRAM_BOT_TOKEN=123456:ABC...
+```
+
+**3. Test with explicit flags first:**
+```bash
+docker run -it --rm \
+  -e TELEGRAM_BOT_TOKEN=your_token \
+  -e TELEGRAM_CHAT_ID=your_id \
+  -v $(pwd)/data:/app/data \
+  nse-paper-trading
+```
+
+**4. Debug .env loading:**
+```bash
+# Show what Docker will see:
+docker run --rm --env-file .env alpine env | grep TELEGRAM
+```
+
+**5. Common .env issues:**
+- Quotes around values (Docker includes them literally)
+- Spaces around `=` sign (not allowed)
+- Windows line endings (`\r\n`) - convert with `dos2unix .env`
+- Missing required variables
+
 ### Docker build fails
 - Ensure Docker is installed and running
 - Try: `docker system prune` to clear cache

@@ -5,7 +5,7 @@ import { StrategyAggregator } from '../position/strategy-aggregator.js';
 import { PositionManager } from '../position/position-manager.js';
 import { FillEngine } from '../execution/fill-engine.js';
 import { InstrumentManager } from '../market-data/instrument-manager.js';
-import { MarketState } from '../market-data/market-state.js';
+import { MarketStateManager } from '../market-data/market-state.js';
 import { RobustMonitor } from '../strategies/robust-monitor.js';
 import { TokenManager } from '../utils/token-manager.js';
 import { logger } from '../utils/logger.js';
@@ -23,7 +23,7 @@ export class TelegramTradingBot {
     allowedUser: number,
     private tokenManager: TokenManager,
     private instrumentManager: InstrumentManager,
-    private marketState: MarketState,
+    private marketState: MarketStateManager,
     private fillEngine: FillEngine,
     private positionManager: PositionManager,
     private strategyAggregator: StrategyAggregator,
@@ -284,7 +284,7 @@ Unrealized: ${formatINR(pnl.unrealized)}
     for (const strat of strategies) {
       text += `**${strat.name}**\n`;
       text += `   Type: ${strat.type} | ${strat.underlying}\n`;
-      text += `   Legs: ${strat.positionIds.length}\n\n`;
+      text += `   Legs: ${strat.positions.length}\n\n`;
     }
 
     await this.bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
@@ -405,7 +405,9 @@ ${safeText}
     const totalPrem = candidate.ceLtp + candidate.peLtp;
     const lotSize = candidate.ce.lotSize;
     const maxProfit = totalPrem * lotSize;
-    const safeZone = `${(candidate.pe.strike - totalPrem).toFixed(0)} - ${(candidate.ce.strike + totalPrem).toFixed(0)}`;
+    const peStrike = candidate.pe.strike ?? 0;
+    const ceStrike = candidate.ce.strike ?? 0;
+    const safeZone = `${(peStrike - totalPrem).toFixed(0)} - ${(ceStrike + totalPrem).toFixed(0)}`;
 
     const text = `
 🎯 **Strangle Candidate (${underlying})**
